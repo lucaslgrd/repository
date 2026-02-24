@@ -16,7 +16,7 @@ jobs:
       mariadb:
         image: mariadb:12.1.2
         env:
-          MARIDB_ROOT_PASWWORD: toor
+          MARIADB_ROOT_PASSWORD: toor
           MARIADB_DATABASE: test
           MARIADB_USER: test
           MARIADB_PASSWORD: test
@@ -31,34 +31,35 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/Checkout@v4
+        uses: actions/checkout@v4
 
       - name: Database Check
         run: |
+          sudo apt update
           sudo apt install -y mysql-client
-          mysql -h 127.0.0.1 --port 3306 -u -root -ptoot -e "SHOW DATABASES"
+          mysql -h 127.0.0.1 --port 3306 -u root -ptoor -e "SHOW DATABASES"
 
       - name: Setup Node
         uses: actions/setup-node@v3
         with:
           node-version: '20.x'
 
-      - name: Install dep
-        run: npm i
+      - name: Install dependencies
+        run: npm install
 
-      - name: Init and Populate BDD
+      - name: Init and Populate DB
         run: |
           npm run initbdd
           npm run populate
 
-      - name: Run test and coverage
+      - name: Run tests and coverage
         run: npm run test:cov
 
       - name: Upload Coverage report
         uses: actions/upload-artifact@v4
         with:
           name: back-coverage-report
-          path: backend/coverage
+          path: Backend/coverage
           retention-days: 1
 
   Frontend:
@@ -71,20 +72,20 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/Checkout@v4
+        uses: actions/checkout@v4
 
       - name: Start Backend
-        run: | 
+        run: |
           cd ..
-          docker compose -f docker-compose-back-build.yml up -days
+          docker compose -f docker-compose-back-build.yml up -d
           docker ps -a
 
-      - name: Wait for BackEnd to be ready  
+      - name: Wait for Backend to be ready
         uses: jakejarvis/wait-action@master
-        with: 
+        with:
           time: '10s'
 
-      - name: Check BackEnd
+      - name: Check Backend
         if: success()
         run: curl http://127.0.0.1:12000
 
@@ -94,16 +95,16 @@ jobs:
           node-version: '20.x'
 
       - name: Cypress E2E Install
-        uses: Cypress-io/github-action@v6
+        uses: cypress-io/github-action@v6
         with:
-          runTest: false
+          runTests: false
           working-directory: Frontend
 
-      - name: Install dep
-        run: npm i
+      - name: Install dependencies
+        run: npm install
 
       - name: Cypress E2E Run
-        uses: Cypress-io/github-action@v6
+        uses: cypress-io/github-action@v6
         with:
           install: false
           start: npm run dev
@@ -112,31 +113,31 @@ jobs:
       - name: Generate Coverage report
         run: npm run cypress:cov
 
-      - name: Upload Coverage report
+      - name: Upload Cypress Screenshots
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: cypress-screenshoot
-          path: frontent/cypress/screenshoots
+          name: cypress-screenshots
+          path: Frontend/cypress/screenshots
           retention-days: 1
 
-      - name: Upload Cy Video
+      - name: Upload Cypress Videos
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: cypress-screenshoot/videos
-          path: frontent/cypress/screenshootsvideos
+          name: cypress-videos
+          path: Frontend/cypress/videos
           retention-days: 1
 
-      - name: Upload report
+      - name: Upload Coverage report
         uses: actions/upload-artifact@v4
         with:
           name: cypress-coverage-report
-          path: frontent/coverage
+          path: Frontend/coverage
           retention-days: 1
 
-      - name: Clean Docker 
+      - name: Clean Docker
         if: always()
         run: |
           cd ..
-          docker compose -f docker-compose-back-build.yml down 
+          docker compose -f docker-compose-back-build.yml down
