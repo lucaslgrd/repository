@@ -14,22 +14,20 @@ jobs:
 
     services:
       mariadb:
-        image: mariadb:12.1.2
+        image: mariadb:10.11
         env:
           MARIADB_ROOT_PASSWORD: toor
           MARIADB_DATABASE: test
           MARIADB_USER: test
           MARIADB_PASSWORD: test
-        ports:
-          - 3306:3306
         options: >-
-          --health-cmd="mysqladmin ping -uroot -ptoor"
-          --health-interval=10s
-          --health-timeout=5s
-          --health-retries=5
+          --health-cmd="mysqladmin ping -h localhost -uroot -ptoor"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=20
 
     env:
-      BDD_HOST: 127.0.0.1
+      BDD_HOST: localhost
       BDD_NAME: test
       BDD_USER: test
       BDD_PASS: test
@@ -40,9 +38,8 @@ jobs:
 
       - name: Wait for database
         run: |
-          sudo apt update
-          sudo apt install -y mysql-client
-          until mysql -h 127.0.0.1 -u root -ptoor -e "SELECT 1"; do
+          for i in {1..30}; do
+            mysql -h localhost -u root -ptoor -e "SELECT 1" && break
             echo "Waiting for MariaDB..."
             sleep 2
           done
@@ -91,7 +88,7 @@ jobs:
 
       - name: Wait for backend API
         run: |
-          until curl -s http://127.0.0.1:12000 > /dev/null; do
+          until curl -s http://localhost:12000 > /dev/null; do
             echo "Waiting for backend..."
             sleep 3
           done
