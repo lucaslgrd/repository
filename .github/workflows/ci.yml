@@ -5,143 +5,139 @@ on:
     branches: [ develop ]
 
 jobs:
-  backend:
+  Backend:
     runs-on: ubuntu-latest
-
     defaults:
       run:
-        working-directory: Backend
+        working-directory: backend
 
     services:
-      mariadb:
-        image: mariadb:10.11
+      mariadb: 
+        image: mariadb:12.1.2
         env:
           MARIADB_ROOT_PASSWORD: toor
           MARIADB_DATABASE: test
           MARIADB_USER: test
           MARIADB_PASSWORD: test
-        options: >-
-          --health-cmd="mysqladmin ping -h localhost -uroot -ptoor"
-          --health-interval=5s
-          --health-timeout=3s
-          --health-retries=20
+        ports:
+          - 3306:3306
+        options: --health-cmd="healthcheck.sh --connect --innodb_initialized" --health-interval=10s --health-timeout=5s --health-retries=3
 
     env:
-      BDD_HOST: localhost
+      BDD_HOST: 127.0.0.1
       BDD_NAME: test
       BDD_USER: test
       BDD_PASS: test
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Wait for database
+      - name: Database check
         run: |
-          for i in {1..30}; do
-            mysql -h localhost -u root -ptoor -e "SELECT 1" && break
-            echo "Waiting for MariaDB..."
-            sleep 2
-          done
+          sudo apt install -y mysql-client
+          mysql -h 127.0.0.1 --port 3306 -u root -ptoor -e "SHOW DATABASES"
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup Node
+        uses: actions/setup-node@v3
         with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: Backend/package-lock.json
+          node-version: '20.x'
 
-      - name: Install dependencies
-        run: npm ci
+      - name: Install Dep
+        run: npm i
 
-      - name: Init and populate database
-        run: |
-          npm run initbdd
-          npm run populate
+      - name: Init  BDD
+        run: npm run initbdd
+          
+      - name: Populate BDD
+        run : |
+          mysql -u root -ptoor --host 127.0.0.1 --port 3306 --database test < ./test/insert_test_user.sql
 
-      - name: Run tests and coverage
+      - name: Run test and coverage
         run: npm run test:cov
 
-      - name: Upload backend coverage
+      - name: Upload Coverage report
         uses: actions/upload-artifact@v4
         with:
-          name: backend-coverage
-          path: Backend/coverage
+          name: back-coverage-report
+          path: backend/coverage
           retention-days: 1
 
-  frontend:
-    needs: backend
+  Frontend:
+    needs: [Backend]
     runs-on: ubuntu-latest
-
     defaults:
       run:
-        working-directory: Frontend
+        working-directory: frontend
 
     steps:
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Start backend (Docker)
+      - name: Start Backend
         run: |
-          docker compose -f ../docker-compose-back-build.yml up -d
-          docker ps
+          cd ..
+          docker compose -f docker-compose-back-build.yml up -d
+          docker ps -a
 
-      - name: Wait for backend API
-        run: |
-          until curl -s http://localhost:12000 > /dev/null; do
-            echo "Waiting for backend..."
-            sleep 3
-          done
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Wait for Backend to be ready
+        uses: jakejarvis/wait-action@master
         with:
-          node-version: 20
-          cache: npm
-          cache-dependency-path: Frontend/package-lock.json
+          time: '10s'
 
-      - name: Install frontend dependencies
-        run: npm ci
+      - name: Check Backend
+        if: success()
+        run: curl http://127.0.0.1:12000
 
-      - name: Cypress install
+      - name: Setup Node
+        uses: actions/setup-node@v3
+        with:
+          node-version: '20.x'
+
+      - name: Cypress E2E Install
         uses: cypress-io/github-action@v6
         with:
           runTests: false
-          working-directory: Frontend
+          working-directory: frontend
 
-      - name: Run Cypress E2E tests
+      - name: Install Dep
+        run: npm i
+
+      - name: Cypress E2E TEST
         uses: cypress-io/github-action@v6
         with:
           install: false
           start: npm run dev
-          working-directory: Frontend
+          working-directory: frontend
 
-      - name: Generate Cypress coverage
+      - name: Generate Coverage repport
         run: npm run cypress:cov
 
-      - name: Upload Cypress screenshots
+      - name: Upload Cy Screen - pour le fun
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: cypress-screenshots
-          path: Frontend/cypress/screenshots
+          name: cypress-screenshot
+          path: frontend/cypress/screenshots
           retention-days: 1
 
-      - name: Upload Cypress videos
+      - name: Upload Cy Video
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: cypress-videos
-          path: Frontend/cypress/videos
+          path: frontend/cypress/videos
           retention-days: 1
 
-      - name: Upload frontend coverage
+      - name: Upload Coverage report
         uses: actions/upload-artifact@v4
         with:
-          name: frontend-coverage
-          path: Frontend/coverage
+          name: cypress-coverage-report
+          path: frontend/coverage
           retention-days: 1
 
-      - name: Stop backend containers
+      - name: Clean Docker
         if: always()
-        run: docker compose -f ../docker-compose-back-build.yml down
+        run: |
+          cd ..
+          docker compose -f docker-compose-back-build.yml down
